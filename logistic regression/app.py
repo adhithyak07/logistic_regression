@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,7 +10,9 @@ import os
 from sklearn.metrics import (
     confusion_matrix,
     classification_report,
-    accuracy_score
+    accuracy_score,
+    roc_curve,
+    roc_auc_score
 )
 current_dir = os.path.dirname(__file__)
 
@@ -25,6 +28,10 @@ st.set_page_config(
 )
 
 st.title("Titanic Survival Prediction App")
+
+st.write(
+    "Logistic Regression using Inbuilt Titanic Dataset"
+)
 df = sns.load_dataset("titanic")
 df = df[
     [
@@ -38,14 +45,13 @@ df = df[
         "embarked"
     ]
 ]
-df["age"].fillna(
-    df["age"].median(),
-    inplace=True
+
+df["age"] = df["age"].fillna(
+    df["age"].median()
 )
 
-df["embarked"].fillna(
-    df["embarked"].mode()[0],
-    inplace=True
+df["embarked"] = df["embarked"].fillna(
+    df["embarked"].mode()[0]
 )
 
 df = pd.get_dummies(
@@ -53,21 +59,28 @@ df = pd.get_dummies(
     columns=["sex", "embarked"],
     drop_first=True
 )
+df = df.dropna()
 st.subheader("Dataset")
 
 st.dataframe(df.head())
+
 X = df.drop("survived", axis=1)
 
 y = df["survived"]
+
 predictions = model.predict(X)
+
+probabilities = model.predict_proba(X)[:,1]
+
 accuracy = accuracy_score(
     y,
     predictions
 )
 
-st.subheader("Accuracy")
+st.subheader("Accuracy Score")
 
-st.write(f"Accuracy: {accuracy:.4f}")
+st.success(f"Accuracy: {accuracy:.4f}")
+
 st.subheader("Confusion Matrix")
 
 cm = confusion_matrix(y, predictions)
@@ -82,9 +95,12 @@ sns.heatmap(
     ax=ax1
 )
 
+ax1.set_xlabel("Predicted")
+ax1.set_ylabel("Actual")
 ax1.set_title("Confusion Matrix")
 
 st.pyplot(fig1)
+
 st.subheader("Classification Report")
 
 report = classification_report(
@@ -93,9 +109,44 @@ report = classification_report(
     output_dict=True
 )
 
-st.dataframe(
-    pd.DataFrame(report).transpose()
+report_df = pd.DataFrame(report).transpose()
+
+st.dataframe(report_df)
+
+st.subheader("ROC Curve")
+
+fpr, tpr, thresholds = roc_curve(
+    y,
+    probabilities
 )
+
+auc_score = roc_auc_score(
+    y,
+    probabilities
+)
+
+fig2, ax2 = plt.subplots(figsize=(6,4))
+
+ax2.plot(
+    fpr,
+    tpr,
+    label=f"AUC = {auc_score:.2f}"
+)
+
+ax2.plot(
+    [0,1],
+    [0,1],
+    linestyle="--"
+)
+
+ax2.set_xlabel("False Positive Rate")
+ax2.set_ylabel("True Positive Rate")
+ax2.set_title("ROC Curve")
+
+ax2.legend()
+
+st.pyplot(fig2)
+
 st.subheader("Feature Importance")
 
 importance_df = pd.DataFrame({
@@ -105,18 +156,19 @@ importance_df = pd.DataFrame({
 
 st.dataframe(importance_df)
 
-fig2, ax2 = plt.subplots(figsize=(8,4))
+fig3, ax3 = plt.subplots(figsize=(8,4))
 
-ax2.bar(
+ax3.bar(
     importance_df["Feature"],
     importance_df["Coefficient"]
 )
 
-ax2.set_title("Feature Importance")
+ax3.set_title("Feature Importance")
 
 plt.xticks(rotation=45)
 
-st.pyplot(fig2)
+st.pyplot(fig3)
+
 st.subheader("Manual Prediction")
 
 pclass = st.selectbox(
@@ -132,13 +184,13 @@ age = st.number_input(
 )
 
 sibsp = st.number_input(
-    "Siblings/Spouses",
+    "Siblings / Spouses",
     min_value=0,
     value=0
 )
 
 parch = st.number_input(
-    "Parents/Children",
+    "Parents / Children",
     min_value=0,
     value=0
 )
@@ -163,6 +215,7 @@ embarked_s = st.selectbox(
     "Embarked S",
     [0,1]
 )
+
 sex_male = 1 if gender == "Male" else 0
 
 input_data = pd.DataFrame({
@@ -175,9 +228,12 @@ input_data = pd.DataFrame({
     "embarked_Q":[embarked_q],
     "embarked_S":[embarked_s]
 })
+
 if st.button("Predict Survival"):
 
-    prediction = model.predict(input_data)[0]
+    prediction = model.predict(
+        input_data
+    )[0]
 
     probability = model.predict_proba(
         input_data
